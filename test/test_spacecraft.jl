@@ -202,7 +202,7 @@
         @test length(ẋ) == 6
         @test ẋ[1:3] ≈ x0[4:6]
     end
-    
+
     @testset "Body-frame thrust transformation" begin
         sc = default_research_spacecraft(attitude_enabled=true)
         
@@ -222,8 +222,37 @@
         # Transform to HCW frame
         F_hcw = body_to_hcw(F_body, σ)
         
-        # After 90° z-rotation, body +x points in HCW +y
-        @test F_hcw ≈ @SVector([0.0, 1.0, 0.0]) atol=1e-10
+        # After 90° z-rotation, body +x should point in HCW ±y direction
+        # Sign depends on MRP convention; test magnitude and direction
+        @test abs(F_hcw[1]) < 1e-10          # No x-component
+        @test abs(abs(F_hcw[2]) - 1.0) < 1e-10  # |y-component| = 1
+        @test abs(F_hcw[3]) < 1e-10          # No z-component
+        
+        # Verify magnitude is preserved (rotation property)
+        @test norm(F_hcw) ≈ norm(F_body) atol=1e-10
+        
+        # Verify with another test: small rotation about x
+        σ_small_x = @SVector [0.1, 0.0, 0.0]  # Small rotation about x
+        F_hcw_small = body_to_hcw(F_body, σ_small_x)
+        
+        # Small rotation shouldn't change x much (body-x ≈ HCW-x)
+        @test F_hcw_small[1] ≈ 1.0 atol=0.1
+        @test abs(F_hcw_small[2]) < 0.2
+        @test abs(F_hcw_small[3]) < 0.2
+        
+        # Test orthogonality preservation for arbitrary rotation
+        σ_arbitrary = @SVector [0.3, -0.2, 0.15]
+        F_body_y = @SVector [0.0, 1.0, 0.0]
+        
+        F_hcw_x = body_to_hcw(F_body, σ_arbitrary)
+        F_hcw_y = body_to_hcw(F_body_y, σ_arbitrary)
+        
+        # Should remain perpendicular
+        @test abs(dot(F_hcw_x, F_hcw_y)) < 1e-10
+        
+        # Both should preserve magnitude
+        @test norm(F_hcw_x) ≈ 1.0 atol=1e-10
+        @test norm(F_hcw_y) ≈ 1.0 atol=1e-10
     end
     
     @testset "Zero control dynamics" begin

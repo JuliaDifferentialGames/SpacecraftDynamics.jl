@@ -26,6 +26,9 @@ to the shadow set when |σ| > threshold to maintain numerical stability.
 ```julia
 using DifferentialEquations
 
+# Import callback types from DiffEqCallbacks/SciMLBase
+using DiffEqCallbacks: DiscreteCallback, ContinuousCallback
+
 # Create callback
 cb = create_mrp_switching_callback(attitude_indices=7:9)
 
@@ -58,14 +61,13 @@ function create_mrp_switching_callback(; threshold::Real=1.0, attitude_indices::
         
         # Apply shadow set transformation: σ_new = -σ/(σᵀσ)
         @. σ = -σ / σ_norm_sq
-        
-        # Optional: log switching event
-        # @info "MRP shadow switching at t=$(integrator.t), |σ|=$(sqrt(σ_norm_sq))"
     end
     
     # Create discrete callback (checked at end of each timestep)
-    return DiscreteCallback(condition, affect!)
+    # Use fully qualified name
+    return SciMLBase.DiscreteCallback(condition, affect!)
 end
+
 
 """
     create_mrp_continuous_switching_callback(; threshold=1.0, attitude_indices=7:9)
@@ -105,12 +107,9 @@ function create_mrp_continuous_switching_callback(; threshold::Real=1.0, attitud
         
         # Apply shadow set transformation
         @. σ = -σ / σ_norm_sq
-        
-        # Optional: log switching event
-        # @info "MRP shadow switching (continuous) at t=$(integrator.t)"
     end
     
     # Create continuous callback with root-finding
-    # affect_neg! not needed since we only care about crossing from below
-    return ContinuousCallback(condition, affect!, nothing)
+    # Use fully qualified name
+    return SciMLBase.ContinuousCallback(condition, affect!, nothing)
 end

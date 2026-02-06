@@ -433,6 +433,7 @@ end
 Create a standard pursuit-evasion game scenario.
 
 Pursuer starts behind evader, both in HCW frame of virtual chief.
+Both spacecraft are translational-only (no attitude dynamics, thrusters only).
 
 # Keyword Arguments
 - `altitude::Real=500e3`: Reference orbit altitude [m]
@@ -465,17 +466,28 @@ function create_pursuit_evasion_scenario(;
     # Virtual chief
     chief = VirtualChief(altitude=altitude)
     
-    # Pursuer and evader spacecraft
-    pursuer = default_research_spacecraft(
+    # Create thrusters-only configurations for translational dynamics
+    pursuer_thrusters = default_research_thrusters(max_thrust=pursuer_thrust)
+    pursuer_actuators = ActuatorConfiguration(thrusters=pursuer_thrusters)
+    
+    evader_thrusters = default_research_thrusters(max_thrust=evader_thrust)
+    evader_actuators = ActuatorConfiguration(thrusters=evader_thrusters)
+    
+    # Pursuer and evader spacecraft (translational-only)
+    pursuer = Spacecraft(
         mass=100.0,
-        thruster_force=pursuer_thrust,
-        attitude_enabled=false  # Simplified dynamics for pursuit-evasion
+        inertia=Diagonal([10.0, 12.0, 8.0]),
+        actuators=pursuer_actuators,
+        attitude_enabled=false,
+        orbital_dynamics=:linear_hcw
     )
     
-    evader = default_research_spacecraft(
+    evader = Spacecraft(
         mass=100.0,
-        thruster_force=evader_thrust,
-        attitude_enabled=false
+        inertia=Diagonal([10.0, 12.0, 8.0]),
+        actuators=evader_actuators,
+        attitude_enabled=false,
+        orbital_dynamics=:linear_hcw
     )
     
     deputies = [pursuer, evader]
@@ -501,5 +513,4 @@ function create_pursuit_evasion_scenario(;
     
     return GameScenarioSetup(chief, deputies, initial_states, time_horizon)
 end
-
 

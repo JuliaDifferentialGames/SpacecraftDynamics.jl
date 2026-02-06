@@ -20,7 +20,16 @@
         evader = scenario.deputies[2]
         
         @test pursuer.mass == evader.mass
-        # Thrust capabilities should differ (via actuator max_thrust)
+        
+        # Both should be translational-only (no wheels)
+        @test isnothing(pursuer.actuators.wheels)
+        @test isnothing(evader.actuators.wheels)
+        @test !isnothing(pursuer.actuators.thrusters)
+        @test !isnothing(evader.actuators.thrusters)
+        
+        # Check thrust capabilities differ
+        @test pursuer.actuators.thrusters.max_thrust[1] ≈ 2.0
+        @test evader.actuators.thrusters.max_thrust[1] ≈ 1.5
         
         # Check initial conditions
         state_p = scenario.initial_states[1]
@@ -45,7 +54,10 @@
             scenario.reference
         )
         
-        @test total_state_dimension(game_dyn) == 12  # 6 + 6 (both translational-only)
+        # Both translational-only: 6D state each
+        @test total_state_dimension(game_dyn) == 12  # 6 + 6
+        
+        # Both have 6 thrusters (no wheels)
         @test total_control_dimension(game_dyn) == 12  # 6 + 6
     end
     
@@ -56,12 +68,11 @@
         x0_p = to_vector(scenario.initial_states[1])
         x0_e = to_vector(scenario.initial_states[2])
         
-        # For translational-only, should be 6D each
-        # But to_vector returns 12D always, so extract first 6
+        # to_vector returns 12D always, extract first 6 for translational-only
         @test length(x0_p) == 12
         @test length(x0_e) == 12
         
-        # Stack for joint initial condition
+        # Stack for joint initial condition (only translational states)
         x0_joint = [x0_p[1:6]; x0_e[1:6]]
         @test length(x0_joint) == 12
     end
@@ -82,23 +93,39 @@
     end
     
     @testset "Multi-spacecraft scenario" begin
-        # Three spacecraft: 1 evader, 2 pursuers
-        evader = default_research_spacecraft(
+        # Three spacecraft: 1 evader, 2 pursuers (all translational-only)
+        
+        evader_thrusters = ActuatorConfiguration(
+            thrusters=default_research_thrusters(max_thrust=1.5)
+        )
+        evader = Spacecraft(
             mass=100.0,
-            thruster_force=1.5,
-            attitude_enabled=false
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=evader_thrusters,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
         )
         
-        pursuer1 = default_research_spacecraft(
+        pursuer1_thrusters = ActuatorConfiguration(
+            thrusters=default_research_thrusters(max_thrust=2.0)
+        )
+        pursuer1 = Spacecraft(
             mass=80.0,
-            thruster_force=2.0,
-            attitude_enabled=false
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=pursuer1_thrusters,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
         )
         
-        pursuer2 = default_research_spacecraft(
+        pursuer2_thrusters = ActuatorConfiguration(
+            thrusters=default_research_thrusters(max_thrust=2.0)
+        )
+        pursuer2 = Spacecraft(
             mass=80.0,
-            thruster_force=2.0,
-            attitude_enabled=false
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=pursuer2_thrusters,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
         )
         
         deputies = [evader, pursuer1, pursuer2]
@@ -137,32 +164,47 @@
         # Create game dynamics
         game_dyn = SpacecraftGameDynamics(scenario.deputies, scenario.reference)
         
+        # All translational-only: 3 × 6D state
         @test total_state_dimension(game_dyn) == 18  # 3 × 6
+        
+        # All have 6 thrusters: 3 × 6D control
         @test total_control_dimension(game_dyn) == 18  # 3 × 6
     end
     
     @testset "Lady-Bandit-Guard problem structure" begin
-        # Lady-Bandit-Guard: 3 players
-        # Lady: evading bandit, protected by guard
-        # Bandit: pursuing lady
-        # Guard: intercepting bandit
+        # Lady-Bandit-Guard: 3 players (all translational-only for simplicity)
         
-        lady = default_research_spacecraft(
+        lady_thrusters = ActuatorConfiguration(
+            thrusters=default_research_thrusters(max_thrust=1.0)
+        )
+        lady = Spacecraft(
             mass=100.0,
-            thruster_force=1.0,
-            attitude_enabled=false
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=lady_thrusters,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
         )
         
-        bandit = default_research_spacecraft(
+        bandit_thrusters = ActuatorConfiguration(
+            thrusters=default_research_thrusters(max_thrust=1.5)
+        )
+        bandit = Spacecraft(
             mass=120.0,
-            thruster_force=1.5,
-            attitude_enabled=false
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=bandit_thrusters,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
         )
         
-        guard = default_research_spacecraft(
+        guard_thrusters = ActuatorConfiguration(
+            thrusters=default_research_thrusters(max_thrust=2.0)
+        )
+        guard = Spacecraft(
             mass=100.0,
-            thruster_force=2.0,
-            attitude_enabled=false
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=guard_thrusters,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
         )
         
         deputies = [lady, bandit, guard]
@@ -202,19 +244,25 @@
     end
     
     @testset "Sun-blocking problem structure" begin
-        # Sun-blocking: Inspector trying to maintain line-of-sight blocked by target
-        # Assumes sun direction is known (e.g., +x direction in HCW)
+        # Sun-blocking: Target with attitude, inspector translational-only
         
+        # Target needs attitude control for blocking
         target = default_research_spacecraft(
             mass=150.0,
             thruster_force=1.0,
             attitude_enabled=true  # Needs to orient for blocking
         )
         
-        inspector = default_research_spacecraft(
+        # Inspector just maintains position
+        inspector_thrusters = ActuatorConfiguration(
+            thrusters=default_research_thrusters(max_thrust=1.5)
+        )
+        inspector = Spacecraft(
             mass=80.0,
-            thruster_force=1.5,
-            attitude_enabled=false  # Just needs to maintain position
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=inspector_thrusters,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
         )
         
         deputies = [target, inspector]

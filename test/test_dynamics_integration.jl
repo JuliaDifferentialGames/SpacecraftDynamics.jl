@@ -1,4 +1,23 @@
 @testset "Dynamics Integration with DifferentialGamesBase" begin
+
+    """
+    Helper to create translational-only spacecraft (no reaction wheels)
+    """
+    function create_translational_spacecraft(;
+        mass::Real=100.0,
+        thruster_force::Real=1.0
+    )
+        thrusters = default_research_thrusters(max_thrust=thruster_force)
+        actuators = ActuatorConfiguration(thrusters=thrusters)
+        
+        return Spacecraft(
+            mass=mass,
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=actuators,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
+        )
+    end
     
     @testset "SpacecraftGameDynamics construction" begin
         # Create spacecraft
@@ -16,33 +35,59 @@
     end
     
     @testset "Player dimensions" begin
+        # Create spacecraft with different configurations
+        # Player 1: attitude-enabled (12D state, 9 controls)
         sc1 = default_research_spacecraft(attitude_enabled=true)
-        sc2 = default_research_spacecraft(attitude_enabled=false)
+        
+        # Player 2: translational-only - need to remove wheels!
+        thrusters_only = ActuatorConfiguration(
+            thrusters=default_research_thrusters()
+        )
+        sc2 = Spacecraft(
+            mass=100.0,
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=thrusters_only,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
+        )
         
         chief = VirtualChief(altitude=500e3)
         game_dyn = SpacecraftGameDynamics([sc1, sc2], chief)
         
-        # Player 1: attitude-enabled (12D state)
+        # Player 1: attitude-enabled (12D state, 9 controls)
         @test player_state_dimension(game_dyn, 1) == 12
         @test player_control_dimension(game_dyn, 1) == 9
         
-        # Player 2: translational-only (6D state)
+        # Player 2: translational-only (6D state, 6 controls - thrusters only)
         @test player_state_dimension(game_dyn, 2) == 6
         @test player_control_dimension(game_dyn, 2) == 6
     end
-    
+
     @testset "Total dimensions" begin
-        sc1 = default_research_spacecraft(attitude_enabled=true)
-        sc2 = default_research_spacecraft(attitude_enabled=true)
-        sc3 = default_research_spacecraft(attitude_enabled=false)
+        # Three spacecraft with varied configurations
+        sc1 = default_research_spacecraft(attitude_enabled=true)  # 12D, 9 controls
+        
+        # Translational-only spacecraft (6D, 6 controls)
+        thrusters_only = ActuatorConfiguration(
+            thrusters=default_research_thrusters()
+        )
+        sc2 = Spacecraft(
+            mass=100.0,
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=thrusters_only,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
+        )
+        
+        sc3 = default_research_spacecraft(attitude_enabled=true)  # 12D, 9 controls
         
         chief = VirtualChief(altitude=500e3)
         game_dyn = SpacecraftGameDynamics([sc1, sc2, sc3], chief)
         
-        # Total state: 12 + 12 + 6 = 30
+        # Total state: 12 + 6 + 12 = 30
         @test total_state_dimension(game_dyn) == 30
         
-        # Total control: 9 + 9 + 6 = 24
+        # Total control: 9 + 6 + 9 = 24
         @test total_control_dimension(game_dyn) == 24
     end
     
@@ -204,17 +249,30 @@
     end
     
     @testset "Multi-player dynamics evaluation" begin
-        # Two-player scenario
-        pursuer = default_research_spacecraft(
+        # Two-player scenario with proper translational-only setup
+        
+        # Pursuer: translational-only
+        pursuer_thrusters = ActuatorConfiguration(
+            thrusters=default_research_thrusters(max_thrust=2.0)
+        )
+        pursuer = Spacecraft(
             mass=80.0,
-            thruster_force=2.0,
-            attitude_enabled=false
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=pursuer_thrusters,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
         )
         
-        evader = default_research_spacecraft(
+        # Evader: translational-only
+        evader_thrusters = ActuatorConfiguration(
+            thrusters=default_research_thrusters(max_thrust=1.5)
+        )
+        evader = Spacecraft(
             mass=100.0,
-            thruster_force=1.5,
-            attitude_enabled=false
+            inertia=Diagonal([10.0, 12.0, 8.0]),
+            actuators=evader_thrusters,
+            attitude_enabled=false,
+            orbital_dynamics=:linear_hcw
         )
         
         chief = VirtualChief(altitude=500e3)
@@ -222,7 +280,7 @@
         
         dyn_fns, n_x, n_u, x_ranges, u_ranges = create_separable_dynamics(game_dyn)
         
-        # Joint state and control
+        # Joint state and control (both 6D state, 6D control)
         x_p = @SVector randn(6)
         x_e = @SVector randn(6)
         x_joint = [x_p; x_e]
