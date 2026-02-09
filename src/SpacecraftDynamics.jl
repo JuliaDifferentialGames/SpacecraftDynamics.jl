@@ -81,7 +81,7 @@ export mean_motion, orbital_period, mean_anomaly_at_time, state_at_time
 export two_body_acceleration
 
 # Frame transformations
-export eci_to_hcw, hcw_to_eci
+export eci_to_hcw, hcw_to_eci, trajectory_hcw_to_eci
 export body_to_hcw, hcw_to_body
 export orbital_frame_rate
 
