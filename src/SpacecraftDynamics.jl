@@ -27,14 +27,25 @@ Schaub, H., & Junkins, J. L. (2014). Analytical Mechanics of Space Systems
 module SpacecraftDynamics
 
 using LinearAlgebra
-using DiffEqCallbacks  # For callback utilities
-import SciMLBase  # For callback types
+using DiffEqCallbacks  
+import SciMLBase 
 using StaticArrays
-using Rotations  # For DCM utilities where needed
+using Rotations  
 using SatelliteToolbox
+using DifferentialGamesBase
 
 # Re-export commonly used LinearAlgebra functions
 using LinearAlgebra: norm, dot, cross, I
+
+# Includes 
+include("attitude.jl")
+include("frames.jl")
+include("orbital.jl")
+include("actuators.jl")
+include("spacecraft.jl")
+include("reference_orbits.jl")
+include("dynamics_integration.jl")
+include("callbacks.jl")
 
 # Physical constants (using SatelliteToolbox conventions)
 const μ_EARTH = 3.986004418e14  # Earth gravitational parameter [m³/s²]
@@ -102,13 +113,5 @@ export create_pursuit_evasion_scenario
 # Callbacks
 export create_mrp_switching_callback, create_mrp_continuous_switching_callback
 
-include("attitude.jl")
-include("frames.jl")
-include("orbital.jl")
-include("actuators.jl")
-include("spacecraft.jl")
-include("reference_orbits.jl")
-include("dynamics_integration.jl")
-include("callbacks.jl")
 
 end # module

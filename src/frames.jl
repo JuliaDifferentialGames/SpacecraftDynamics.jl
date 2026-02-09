@@ -192,3 +192,112 @@ function orbital_frame_rate(r_chief::SVector{3,T}, v_chief::SVector{3,T}) where 
     r_squared = dot(r_chief, r_chief)
     return h / r_squared
 end
+
+
+"""
+    trajectory_hcw_to_eci(traj_hcw::Trajectory, r_orbit::Real; 
+                          chief_id::Integer=1, μ::Real=3.986004418e14)
+
+Convert a trajectory from HCW (LVLH) frame to ECI frame for visualization.
+
+Assumes chief spacecraft is in a circular orbit at radius `r_orbit`.
+
+# Arguments
+- `traj_hcw`: Trajectory with states in HCW frame [x, y, z, vx, vy, vz, σ, ω]
+- `r_orbit`: Orbital radius [m] (e.g., 6.771e6 for 400 km altitude)
+- `chief_id`: Player ID of chief spacecraft (default: 1)
+- `μ`: Earth gravitational parameter [m³/s²]
+
+# Returns
+- New `Trajectory` with states in ECI frame
+
+# Notes
+- Chief starts at [r_orbit, 0, 0] with velocity [0, v_circular, 0]
+- HCW frame rotates with chief's orbital motion
+- Attitude (σ, ω) remains in HCW frame (relative to LVLH)
+
+# Example
+```julia
+# Convert formation trajectory for Vizard visualization
+traj_eci = trajectory_hcw_to_eci(traj_lvlh, 6.771e6)
+visualize_with_vizard([traj_eci], "formation.py")
+```
+"""
+function trajectory_hcw_to_eci(traj_hcw::Trajectory{T}, r_orbit::Real;
+                                chief_id::Integer=1, μ::Real=3.986004418e14) where T
+    
+    # Orbital parameters
+    n = sqrt(μ / r_orbit^3)  # Mean motion [rad/s]
+    v_circular = sqrt(μ / r_orbit)  # Circular velocity [m/s]
+    
+    N = length(traj_hcw.times)
+    state_dim = size(traj_hcw.states, 1)
+    states_eci = zeros(T, state_dim, N)
+    
+    is_chief = (traj_hcw.player_id == chief_id)
+    
+    for k in 1:N
+        t = traj_hcw.times[k]
+        θ = n * t  # True anomaly for circular orbit
+        
+        # Chief's position and velocity in ECI
+        r_chief = SVector{3,T}(r_orbit * cos(θ), r_orbit * sin(θ), 0)
+        v_chief = SVector{3,T}(-v_circular * sin(θ), v_circular * cos(θ), 0)
+        
+        if is_chief
+            # Chief: place at circular orbit position
+            states_eci[1:3, k] = r_chief
+            states_eci[4:6, k] = v_chief
+        else
+            # Deputy: convert from HCW to ECI
+            r_hcw = SVector{3,T}(traj_hcw.states[1:3, k]...)
+            v_hcw = SVector{3,T}(traj_hcw.states[4:6, k]...)
+            
+            r_eci, v_eci = hcw_to_eci(r_hcw, v_hcw, r_chief, v_chief)
+            
+            states_eci[1:3, k] = r_eci
+            states_eci[4:6, k] = v_eci
+        end
+        
+        # Copy attitude states if present (remain in body frame)
+        if state_dim >= 12
+            states_eci[7:12, k] = traj_hcw.states[7:12, k]
+        elseif state_dim >= 9
+            states_eci[7:9, k] = traj_hcw.states[7:9, k]
+        end
+    end
+    
+    return Trajectory{T}(
+        traj_hcw.player_id,
+        states_eci,
+        traj_hcw.controls,
+        traj_hcw.times,
+        traj_hcw.cost
+    )
+end
+
+"""
+    trajectories_hcw_to_eci(trajs_hcw::Vector{Trajectory{T}}, r_orbit::Real; 
+                            chief_id::Integer=1, μ::Real=3.986004418e14) where T
+
+Convert multiple trajectories from HCW to ECI frame.
+
+# Arguments
+- `trajs_hcw`: Vector of trajectories in HCW frame
+- `r_orbit`: Orbital radius [m]
+- `chief_id`: Player ID of chief spacecraft
+- `μ`: Earth gravitational parameter [m³/s²]
+
+# Returns
+- Vector of trajectories in ECI frame
+
+# Example
+```julia
+trajs_eci = trajectories_hcw_to_eci(trajs_lvlh, 6.771e6)
+visualize_with_vizard(trajs_eci, "formation.py")
+```
+"""
+function trajectories_hcw_to_eci(trajs_hcw::Vector{Trajectory{T}}, r_orbit::Real;
+                                  chief_id::Integer=1, μ::Real=3.986004418e14) where T
+    return [trajectory_hcw_to_eci(traj, r_orbit, chief_id=chief_id, μ=μ) for traj in trajs_hcw]
+end
